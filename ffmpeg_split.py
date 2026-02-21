@@ -6,7 +6,8 @@ import cv2
 import numpy as np
 
 # Configuration constants (change these directly for debugging)
-INPUT_VIDEO = r"C:\Users\Stanley\Desktop\Janell_Jellyfish\20251031_0400_Janelle_babyJs_1_cam1vidnum01.mp4"
+INPUT_DIR = r"C:\Users\Stanley\Desktop\Janell_Jellyfish"  # folder containing all input videos
+VIDEO_EXTENSIONS = ('.mp4', '.avi', '.mov', '.mkv', '.MP4', '.AVI', '.MOV', '.MKV')
 OUTPUT_DIR = "output_ffmpeg"
 PADDING = 1.2
 CODEC = "libx264"  # e.g. libx264 or h264_nvenc
@@ -143,10 +144,12 @@ def run_ffmpeg(input_path, output_dir, crops, out_size, codec, hwaccel=None, ext
         cmd += ["-t", str(duration)]
     cmd += ["-filter_complex", filter_complex]
 
-    # add mapping and codec for each output
+    # add mapping and codec for each output; each well goes into its own subfolder
     base = os.path.splitext(os.path.basename(input_path))[0]
     for i in range(len(crops)):
-        out_path = os.path.join(output_dir, f"{base}_well_{i+1}.mp4")
+        well_dir = os.path.join(output_dir, f"well_{i+1}")
+        os.makedirs(well_dir, exist_ok=True)
+        out_path = os.path.join(well_dir, f"{base}.mp4")
         cmd += ["-map", f"[v{i}]", "-c:v", codec, out_path]
 
     if extra_args:
@@ -175,7 +178,6 @@ def parse_args():
 
 def main():
     # Use module-level constants instead of CLI args
-    input_path = INPUT_VIDEO
     out_dir = OUTPUT_DIR
     padding = PADDING
     codec = CODEC
@@ -186,14 +188,25 @@ def main():
     select_rois = SELECT_ROIS
     duration = DURATION
 
-    cap = cv2.VideoCapture(input_path)
-    if not cap.isOpened():
-        raise RuntimeError(f"Cannot open video: {input_path}")
-    ret, frame = cap.read()
-    if not ret:
-        raise RuntimeError("Cannot read first frame from input")
+    # Collect all video files from INPUT_DIR, sorted for consistent ordering
+    video_files = sorted(
+        os.path.join(INPUT_DIR, f) for f in os.listdir(INPUT_DIR)
+        if f.lower().endswith(VIDEO_EXTENSIONS)
+    )
+    if not video_files:
+        raise RuntimeError(f"No video files found in: {INPUT_DIR}")
+    print(f"Found {len(video_files)} video(s) to process in: {INPUT_DIR}")
 
-    # Selection options: manual or automatic
+    # Determine crops from the first video (same camera setup assumed for all)
+    cap = cv2.VideoCapture(video_files[0])
+    if not cap.isOpened():
+        raise RuntimeError(f"Cannot open video: {video_files[0]}")
+    ret, frame = cap.read()
+    cap.release()
+    if not ret:
+        raise RuntimeError(f"Cannot read first frame from: {video_files[0]}")
+
+    # Selection options: manual or automatic (done once, reused for all videos)
     crops = None
     sizes = None
     if select_grid:
@@ -252,18 +265,17 @@ def main():
             for i, ((cx, cy), r) in enumerate(zip(centers, radii)):
                 cv2.circle(vis, (int(cx), int(cy)), int(r), (0, 255, 0), 2)
                 cv2.putText(vis, str(i + 1), (int(cx) - 10, int(cy) + 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
-        dbg_path = os.path.join(out_dir, os.path.splitext(os.path.basename(input_path))[0] + "_detection_ffmpeg.png")
+        dbg_path = os.path.join(out_dir, os.path.splitext(os.path.basename(video_files[0]))[0] + "_detection_ffmpeg.png")
         os.makedirs(out_dir, exist_ok=True)
         cv2.imwrite(dbg_path, vis)
         print("Saved debug image:", dbg_path)
 
-    # Build and run ffmpeg
-    try:
+    # Process each video with the same crops
+    for idx, input_path in enumerate(video_files):
+        print(f"\n[{idx+1}/{len(video_files)}] Processing: {os.path.basename(input_path)}")
         run_ffmpeg(input_path, out_dir, crops, out_size, codec, hwaccel=hwaccel, duration=duration)
-    finally:
-        cap.release()
 
-    print("ffmpeg split completed. Outputs in:", out_dir)
+    print(f"\nDone. {len(video_files)} video(s) split into {len(crops)} wells each. Outputs in: {out_dir}")
 
 
 if __name__ == '__main__':
