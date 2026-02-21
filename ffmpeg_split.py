@@ -6,9 +6,9 @@ import cv2
 import numpy as np
 
 # Configuration constants (change these directly for debugging)
-INPUT_DIR = r"C:\Users\Stanley\Desktop\Janell_Jellyfish"  # folder containing all input videos
+INPUT_DIR = r"E:\Janelle_babyJs"  # folder containing all input videos
 VIDEO_EXTENSIONS = ('.mp4', '.avi', '.mov', '.mkv', '.MP4', '.AVI', '.MOV', '.MKV')
-OUTPUT_DIR = "output_ffmpeg"
+OUTPUT_DIR = r"E:\Janelle_babyJs\output"
 PADDING = 1.2
 CODEC = "libx264"  # e.g. libx264 or h264_nvenc
 HWACCEL = None  # e.g. "cuda" or None
@@ -16,7 +16,7 @@ SCALE = None  # e.g. (640, 640) or None to use detected size
 DEBUG = True
 SELECT_GRID = True
 SELECT_ROIS = False
-DURATION = 30  # seconds, or None to process full video
+DURATION = None  # seconds, or None to process full video
 FFMPEG_BIN = None  # set to full path to ffmpeg.exe if not on PATH, e.g. r"C:\ffmpeg\bin\ffmpeg.exe"
 
 
@@ -254,6 +254,10 @@ def main():
     else:
         max_s = max([s for s, _ in sizes]) if sizes else min(frame.shape[:2])
         out_size = (max_s, max_s)
+
+    # libx264 (and most codecs) require width and height to be divisible by 2;
+    # round each dimension up to the nearest even number to avoid encoder errors
+    out_size = (out_size[0] + out_size[0] % 2, out_size[1] + out_size[1] % 2)
 
     if debug:
         vis = frame.copy()
